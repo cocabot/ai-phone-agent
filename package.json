@@ -1,0 +1,30 @@
+{
+  "name": "ai-phone-agent-jp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Japan-first AI phone agent plugin using Twilio + OpenAI Realtime SIP",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "express": "^5.1.0",
+    "openai": "^6.0.0",
+    "ws": "^8.18.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.0",
+    "tsx": "^4.20.0",
+    "typescript": "^6.0.0"
+  }
+}
