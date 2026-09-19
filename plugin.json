@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ai-phone-agent-jp",
+  "version": "0.1.0",
+  "description": "Place user-approved AI phone calls to Japanese phone numbers and check or stop those calls.",
+  "author": {
+    "name": "cocabot"
+  },
+  "homepage": "https://github.com/cocabot/ai-phone-agent",
+  "repository": "https://github.com/cocabot/ai-phone-agent",
+  "license": "MIT",
+  "keywords": ["phone", "voice", "japan", "twilio", "openai", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AI Phone Agent JP",
+        "shortDescription": "AIが日本の電話番号へ発信して会話します",
+        "longDescription": "ユーザーが明示的に依頼した日本国内向けの電話を、TwilioとOpenAI Realtime SIPを使って発信します。通話状況の確認と通話終了にも対応します。",
+        "developerName": "cocabot",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://github.com/cocabot/ai-phone-agent",
+        "defaultPrompt": [
+          "レストランに電話して予約の空きを確認して",
+          "この電話の状況を確認して",
+          "進行中の電話を終了して"
+        ]
+      }
+    }
+  }
+}
