@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -10,38 +10,51 @@ export type CallContext = {
   objective: string;
   instructions?: string;
   issuedAt: number;
-  nonce: string;
 };
 
-function b64url(input: string | Buffer): string {
-  return Buffer.from(input).toString("base64url");
+type StoredContext = CallContext & { expiresAt: number };
+
+// MVP store: the SIP header only carries a short signed opaque ID because
+// Twilio limits SIP URIs to 255 characters. For horizontal scaling, replace
+// this Map with Redis/KV using the same token -> context interface.
+const contexts = new Map<string, StoredContext>();
+
+function cleanupContexts() {
+  const now = Date.now();
+  for (const [id, ctx] of contexts) {
+    if (ctx.expiresAt <= now) contexts.delete(id);
+  }
 }
 
-export function signCallContext(input: Omit<CallContext, "issuedAt" | "nonce">): string {
-  const payload: CallContext = {
+export function signCallContext(input: Omit<CallContext, "issuedAt">): string {
+  cleanupContexts();
+  const id = randomBytes(16).toString("base64url");
+  const sig = createHmac("sha256", required("CALL_CONTEXT_SECRET")).update(id).digest("base64url");
+  contexts.set(id, {
     ...input,
     issuedAt: Date.now(),
-    nonce: randomUUID(),
-  };
-  const body = b64url(JSON.stringify(payload));
-  const sig = createHmac("sha256", required("CALL_CONTEXT_SECRET")).update(body).digest("base64url");
-  return `${body}.${sig}`;
+    expiresAt: Date.now() + 10 * 60_000,
+  });
+  return `${id}.${sig}`;
 }
 
 export function verifyCallContext(token: string): CallContext {
-  const [body, providedSig] = token.split(".");
-  if (!body || !providedSig) throw new Error("Malformed call context");
+  cleanupContexts();
+  const [id, providedSig] = token.split(".");
+  if (!id || !providedSig) throw new Error("Malformed call context");
 
-  const expectedSig = createHmac("sha256", required("CALL_CONTEXT_SECRET")).update(body).digest();
+  const expectedSig = createHmac("sha256", required("CALL_CONTEXT_SECRET")).update(id).digest();
   const actualSig = Buffer.from(providedSig, "base64url");
   if (expectedSig.length !== actualSig.length || !timingSafeEqual(expectedSig, actualSig)) {
     throw new Error("Invalid call context signature");
   }
 
-  const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as CallContext;
-  if (!payload.objective || !payload.issuedAt || !payload.nonce) throw new Error("Invalid call context");
-  if (Date.now() - payload.issuedAt > 10 * 60_000) throw new Error("Expired call context");
-  return payload;
+  const stored = contexts.get(id);
+  if (!stored) throw new Error("Unknown or expired call context");
+  contexts.delete(id);
+
+  const { expiresAt: _expiresAt, ...ctx } = stored;
+  return ctx;
 }
 
 export function normalizeJapanNumber(raw: string): string {
@@ -54,11 +67,10 @@ export function normalizeJapanNumber(raw: string): string {
     throw new Error("Japan-first MVP only accepts Japanese E.164 numbers (+81...)");
   }
 
-  // Emergency and high-risk/special service destinations are intentionally blocked.
   const blocked = [
-    "+81110", // police
-    "+81118", // coast guard
-    "+81119", // fire / ambulance
+    "+81110",
+    "+81118",
+    "+81119",
   ];
   if (blocked.includes(n)) throw new Error("Emergency-service numbers are blocked");
   if (n.startsWith("+81570")) throw new Error("0570 service numbers are blocked in this MVP");
@@ -93,7 +105,9 @@ async function twilioRequest(path: string, init: RequestInit = {}) {
   const text = await response.text();
   let data: any = text;
   try { data = JSON.parse(text); } catch {}
-  if (!response.ok) throw new Error(`Twilio error ${response.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`);
+  if (!response.ok) {
+    throw new Error(`Twilio error ${response.status}: ${typeof data === "string" ? data : JSON.stringify(data)}`);
+  }
   return data;
 }
 
@@ -108,10 +122,8 @@ export async function createPhoneCall(params: {
   const context = signCallContext({ objective: params.objective, instructions: params.instructions });
 
   const sipUri =
-    `sip:${projectId}@sip.api.openai.com;transport=tls;edge=tokyo?X-Call-Context%3D${encodeURIComponent(context)}`;
+    `sip:${projectId}@sip.api.openai.com;transport=tls;edge=tokyo?x-call-context=${encodeURIComponent(context)}`;
 
-  // The first sentence is spoken by Twilio before the AI bridge is connected so
-  // the recipient immediately knows this is an AI-assisted call.
   const twiml = [
     "<Response>",
     '<Say language="ja-JP">AIアシスタントからのお電話です。これからAIが会話します。</Say>',
