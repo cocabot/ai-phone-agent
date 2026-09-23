@@ -497,22 +497,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if settings.gemini_api_key:
         ok(f"GEMINI_API_KEY set; model={settings.gemini_model} voice={settings.gemini_voice}")
         if not args.offline:
-            try:
-                from google import genai
-
-                client = genai.Client(api_key=settings.gemini_api_key)
-                try:
-                    client.models.get(model=settings.gemini_model)
-                    ok(f"Gemini model {settings.gemini_model} is visible to this key")
-                except Exception as exc:  # noqa: BLE001
-                    warn(f"could not fetch model {settings.gemini_model}: {exc}")
-                    live_models = [m.name for m in client.models.list() if "live" in (m.name or "").lower() or "audio" in (m.name or "").lower()]
-                    if live_models:
-                        print("      live-capable models visible to this key:")
-                        for name in live_models[:15]:
-                            print(f"        {name.removeprefix('models/')}")
-            except Exception as exc:  # noqa: BLE001
-                fail(f"Gemini API: {exc}")
+            _doctor_gemini(settings, ok, warn, fail)
     else:
         fail("GEMINI_API_KEY missing (create one in Google AI Studio)")
 
@@ -530,6 +515,45 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     print()
     print(f"{failures} failure(s), {warnings} warning(s)")
     return 1 if failures else 0
+
+
+def _doctor_gemini(settings: Any, ok: Any, warn: Any, fail: Any) -> None:
+    from google import genai
+    from google.genai import errors as genai_errors
+
+    def describe(exc: Exception) -> str:
+        if isinstance(exc, genai_errors.APIError):
+            message = str(exc.message or "")
+            if message.startswith("{"):
+                try:
+                    message = json.loads(message.replace("'", '"')).get("error", {}).get("message", message)
+                except (ValueError, AttributeError):
+                    pass
+            return f"{exc.code} {exc.status or ''} {message}".strip()
+        return f"{type(exc).__name__}: {exc}"
+
+    try:
+        client = genai.Client(api_key=settings.gemini_api_key)
+        try:
+            client.models.get(model=settings.gemini_model)
+            ok(f"Gemini model {settings.gemini_model} is visible to this key")
+            return
+        except genai_errors.APIError as exc:
+            if exc.code in (400, 401, 403) and "api key" in str(exc.message).lower():
+                fail(f"Gemini API key rejected: {describe(exc)}")
+                return
+            warn(f"model {settings.gemini_model} not available for this key: {describe(exc)}")
+        live_models = [
+            (m.name or "").removeprefix("models/")
+            for m in client.models.list()
+            if "live" in (m.name or "").lower() or "native-audio" in (m.name or "").lower()
+        ]
+        if live_models:
+            print("      Live-capable models visible to this key (set GEMINI_MODEL):")
+            for name in live_models[:15]:
+                print(f"        {name}")
+    except Exception as exc:  # noqa: BLE001
+        fail(f"Gemini API: {describe(exc)}")
 
 
 # --------------------------------------------------------------------------- parser
