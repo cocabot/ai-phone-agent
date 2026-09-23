@@ -38,14 +38,20 @@ log = logging.getLogger("vonage-agent.bridge")
 MAX_PLAYBACK_BACKLOG_S = 40.0  # Vonage buffers ~60 s; stay well below it
 INACTIVITY_TIMEOUT_S = 45.0  # no frames from Vonage for this long -> give up
 HANGUP_FALLBACK_S = 12.0  # hang up even if Vonage never acknowledges playback end
+GEMINI_INPUT_CHUNK_MS = 60  # batch Vonage's 20 ms frames before sending to Gemini
 
 HangupCallback = Callable[[CallRecord, str], Awaitable[None]]
 DtmfCallback = Callable[[CallRecord, str], Awaitable[bool]]
 
 
+class VonageGone(Exception):
+    """The Vonage WebSocket closed while we were still sending audio."""
+
+
 def build_tools() -> list[types.Tool]:
     end_call = types.FunctionDeclaration(
         name="end_call",
+        behavior=types.Behavior.NON_BLOCKING,
         description=(
             "通話を終了します。用件が済んでお別れの挨拶を言い終えた直後、"
             "または相手が通話終了を希望したときに必ず呼び出してください。"
@@ -68,6 +74,7 @@ def build_tools() -> list[types.Tool]:
     )
     press_keys = types.FunctionDeclaration(
         name="press_keys",
+        behavior=types.Behavior.NON_BLOCKING,
         description=(
             "自動音声ガイダンス（IVR）でプッシュボタン操作を求められたときに、DTMF信号を送ります。"
             "0-9、*、# を組み合わせた文字列を指定します。"
@@ -215,6 +222,8 @@ class GeminiVoiceBridge:
 
     async def _pump_vonage_to_gemini(self, session: Any) -> str:
         mime = f"audio/pcm;rate={self.rate}"
+        chunk_bytes = frame_bytes(self.rate, GEMINI_INPUT_CHUNK_MS)
+        pending = bytearray()
         while True:
             message = await self.ws.receive()
             kind = message.get("type")
@@ -224,7 +233,10 @@ class GeminiVoiceBridge:
             if data:
                 self.bytes_in += len(data)
                 self._last_vonage_frame = time.monotonic()
-                await session.send_realtime_input(audio=types.Blob(data=data, mime_type=mime))
+                pending.extend(data)
+                if len(pending) >= chunk_bytes:
+                    await session.send_realtime_input(audio=types.Blob(data=bytes(pending), mime_type=mime))
+                    pending.clear()
                 continue
             text = message.get("text")
             if text:
@@ -262,7 +274,13 @@ class GeminiVoiceBridge:
         backlog = self._playhead - now
         if backlog > MAX_PLAYBACK_BACKLOG_S:
             await asyncio.sleep(backlog - MAX_PLAYBACK_BACKLOG_S)
-        await self.ws.send_bytes(frame)
+        if self.ws.client_state != WebSocketState.CONNECTED or self.ws.application_state != WebSocketState.CONNECTED:
+            raise VonageGone()
+        try:
+            await self.ws.send_bytes(frame)
+        except (WebSocketDisconnect, RuntimeError, OSError) as exc:
+            # Callee hung up while the model was still talking: a normal end, not an error.
+            raise VonageGone() from exc
         self.bytes_out += len(frame)
         self._playhead += FRAME_MS / 1000
 
@@ -270,8 +288,15 @@ class GeminiVoiceBridge:
         self.chunker.clear()
         self.resampler.reset()
         self._playhead = time.monotonic()
-        if self.ws.client_state == WebSocketState.CONNECTED:
-            await self.ws.send_text(json.dumps({"action": "clear"}))
+        await self._send_command({"action": "clear"})
+
+    async def _send_command(self, command: dict[str, Any]) -> None:
+        if self.ws.client_state != WebSocketState.CONNECTED or self.ws.application_state != WebSocketState.CONNECTED:
+            raise VonageGone()
+        try:
+            await self.ws.send_text(json.dumps(command))
+        except (WebSocketDisconnect, RuntimeError, OSError) as exc:
+            raise VonageGone() from exc
 
     async def _close_ws(self) -> None:
         try:
@@ -283,14 +308,17 @@ class GeminiVoiceBridge:
     # ------------------------------------------------------------ gemini side
 
     async def _pump_gemini_to_vonage(self, session: Any) -> str:
-        while True:
-            # receive() ends at every turn boundary; keep pulling until the session closes.
-            async for message in session.receive():
-                result = await self._handle_gemini_message(session, message)
-                if result:
-                    return result
-            if self._hangup_pending and not self._hangup_started:
-                return await self._finish_call()
+        try:
+            while True:
+                # receive() ends at every turn boundary; keep pulling until the session closes.
+                async for message in session.receive():
+                    result = await self._handle_gemini_message(session, message)
+                    if result:
+                        return result
+                if self._hangup_pending and not self._hangup_started:
+                    return await self._finish_call()
+        except VonageGone:
+            return "vonage_disconnected"
 
     async def _handle_gemini_message(self, session: Any, message: types.LiveServerMessage) -> str | None:
         if message.data:
@@ -380,13 +408,12 @@ class GeminiVoiceBridge:
         self._notify_waiter = loop.create_future()
         backlog = max(self._playhead - time.monotonic(), 0.0)
         try:
-            if self.ws.client_state == WebSocketState.CONNECTED:
-                await self.ws.send_text(json.dumps({"action": "notify", "payload": {"kind": "end_call"}}))
+            await self._send_command({"action": "notify", "payload": {"kind": "end_call"}})
             await asyncio.wait_for(self._notify_waiter, timeout=backlog + HANGUP_FALLBACK_S)
         except asyncio.TimeoutError:
             log.info("playback-end notify not received; hanging up anyway")
-        except Exception:  # noqa: BLE001
-            pass
+        except VonageGone:
+            return "vonage_disconnected"
         # Vonage may buffer a little beyond the notify; give the goodbye a moment to land.
         await asyncio.sleep(0.5)
         await self.on_hangup(self.record, "agent_end_call")

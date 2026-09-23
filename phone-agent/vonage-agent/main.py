@@ -41,7 +41,6 @@ from calls import CallRecord, CallRegistry
 from config import (
     RUNTIME_DIR,
     Settings,
-    cloudflared_available,
     effective_tunnel_mode,
     normalize_public_url,
     private_key_file_ok,
@@ -66,6 +65,7 @@ GOODBYE_TEXT = "通話を終了します。失礼いたします。"
 class AppState:
     def __init__(self, s: Settings):
         self.settings = s
+        CallRecord.stale_after_seconds = s.call_max_seconds + 180
         self.registry = CallRegistry()
         self.vonage = VonageClient(s)
         self.started_at = time.time()
@@ -91,9 +91,6 @@ class AppState:
         self.public_url = normalize_public_url(url)
         self.public_url_source = source
         write_state_file(self)
-
-    def public_host(self) -> str:
-        return self.public_url.removeprefix("https://")
 
     # --- webhook sync ------------------------------------------------------
 
@@ -473,8 +470,12 @@ async def media_socket(websocket: WebSocket) -> None:
     meta = parse_ws_metadata(first.get("text"))
     call_ref = extract_call_ref(meta)
     record = state.registry.by_ref(call_ref)
-    if record is None:
-        log.warning("websocket rejected: unknown call_ref=%s", call_ref)
+    if record is None or record.ended_at is not None or record.ws_connected:
+        log.warning(
+            "websocket rejected: %s call_ref=%s",
+            "unknown" if record is None else ("call already ended" if record.ended_at else "duplicate connection"),
+            call_ref,
+        )
         await websocket.close(code=1008)
         return
 
@@ -572,11 +573,14 @@ async def create_call(req: CallRequest, state: AppState = Depends(get_state)) ->
     if problems and not req.dry_run:
         raise HTTPException(status_code=409, detail="; ".join(problems))
 
-    active = state.registry.active()
+    active = state.registry.active(direction="outbound")
     if len(active) >= settings.max_concurrent_calls and not req.dry_run:
         raise HTTPException(
             status_code=429,
-            detail=f"{len(active)} call(s) already active (MAX_CONCURRENT_CALLS={settings.max_concurrent_calls}); hang up first",
+            detail=(
+                f"{len(active)} outbound call(s) already active (MAX_CONCURRENT_CALLS={settings.max_concurrent_calls}); "
+                f"hang up first: {', '.join(r.uuid or r.call_ref for r in active)}"
+            ),
         )
 
     record = state.registry.create(

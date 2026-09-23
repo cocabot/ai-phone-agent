@@ -17,6 +17,10 @@ from typing import Any
 from phone_numbers import mask_number
 
 MAX_CALLS_KEPT = 200
+# A call that never received a terminal event is considered over after this long
+# (main.py raises it to CALL_MAX_SECONDS + grace) so it cannot block new calls forever.
+DEFAULT_STALE_AFTER_SECONDS = 1200.0
+TERMINAL_STATUSES = {"completed", "failed", "rejected", "busy", "cancelled", "timeout", "unanswered"}
 
 
 @dataclass
@@ -77,9 +81,15 @@ class CallRecord:
 
     # --- lifecycle helpers ----------------------------------------------
 
+    stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS
+
     @property
     def active(self) -> bool:
-        return self.ended_at is None and self.status not in {"completed", "failed", "rejected", "busy", "cancelled", "timeout", "unanswered"}
+        if self.ended_at is not None or self.status in TERMINAL_STATUSES:
+            return False
+        if time.time() - self.created_at > self.stale_after_seconds and not self.ws_connected:
+            return False
+        return True
 
     def note_event(self, payload: dict[str, Any]) -> None:
         status = str(payload.get("status") or payload.get("detail") or "")
@@ -106,7 +116,7 @@ class CallRecord:
             self.status = status
         if status == "answered" and self.answered_at is None:
             self.answered_at = time.time()
-        if status in {"completed", "failed", "rejected", "busy", "cancelled", "timeout", "unanswered"}:
+        if status in TERMINAL_STATUSES:
             self.ended_at = self.ended_at or time.time()
             self.end_reason = self.end_reason or status
             if payload.get("duration") is not None:
@@ -205,5 +215,5 @@ class CallRegistry:
         refs = self._order[-limit:]
         return [self._by_ref[r] for r in reversed(refs) if r in self._by_ref]
 
-    def active(self) -> list[CallRecord]:
-        return [r for r in self._by_ref.values() if r.active]
+    def active(self, *, direction: str | None = None) -> list[CallRecord]:
+        return [r for r in self._by_ref.values() if r.active and (direction is None or r.direction == direction)]
