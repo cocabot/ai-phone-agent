@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+  echo "vonage-agent: .venv not found. Run: $ROOT/setup.sh" >&2
+  exit 1
+fi
+exec "$PY" "$ROOT/agentctl.py" "$@"
