@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Speak language="ja-JP" voice="WOMAN">
+    これはAI電話システムのPlivoテストです。正常に電話を発信できました。
+  </Speak>
+</Response>
