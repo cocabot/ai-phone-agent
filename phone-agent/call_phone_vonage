@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# AI conversation call via Vonage + Gemini Live. Same as: vonage-agent/vonage call ...
+#   ./call_phone_vonage --dry-run +819012345678 "明日19時に2名で予約できるか確認"
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/vonage-agent/vonage" call "$@"

@@ -152,9 +152,9 @@ curl http://localhost:3000/health
 
 - **Twilio Trial**: `call_phone` / `call_phone.py` — 固定の日本語TTSを1回話して切る発信テスト。`--dry-run` は発信せず設定と番号だけ検証、`--trial` はTrialアカウント向けの最小パラメータで発信
 - **Plivo**: `call_phone_plivo` / `serve_plivo_answer.py` — 公開 `PLIVO_ANSWER_URL` が返す `static/plivo_answer.xml` を使う発信テスト
-- **Vonage WebSocket接続確認**: `vonage-agent/` — Vonage Voice APIのAnswer / Event webhookと、音声バイトを受け取るWebSocket（`/socket`）を持つFastAPIアプリ。AIブリッジは未接続
+- **Vonage + Gemini Live（AI会話）**: `vonage-agent/` — Vonage Voice APIのWebSocket音声をGemini Live（`gemini-3.8-live`）へ双方向に中継し、AIが日本語で会話するFastAPIアプリ。Cloudflare quick tunnelを自動起動し、URLが変わるたびにVonage ApplicationのwebhookをApplication APIで自動更新します。`./vonage serve --detach` → `./call_phone_vonage --dry-run +81... "目的"` の順で使います。Vonage無料トライアル + Google AI Studioの無料枠で試せます
 
-セットアップと環境変数は `phone-agent/README.md` と `phone-agent/vonage-agent/README.md` を参照してください。資格情報は各ディレクトリの `.env.example` をコピーした `.env` に入れ、`.env` / `*.key` / `private.key` / `.venv` はコミットしないでください（`.gitignore` で除外済み）。ライブ発信は課金され、相手に実際に電話がかかります。明示的に指示された場合のみ実行し、確認には `--dry-run` を使ってください。
+セットアップと環境変数は `phone-agent/README.md` と `phone-agent/vonage-agent/README.md` を参照してください。資格情報は各ディレクトリの `.env.example` をコピーした `.env` に入れ、`.env` / `*.key` / `private.key` / `.venv` / `.runtime` はコミットしないでください（`.gitignore` で除外済み）。ライブ発信は課金され、相手に実際に電話がかかります。明示的に指示された場合のみ実行し、確認には `--dry-run` を使ってください。
 
 ## License
 
