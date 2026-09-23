@@ -4,3 +4,10 @@ dist/
 .env.local
 .DS_Store
 npm-debug.log*
+
+# Python (phone-agent/ testbed) and provider key material
+.venv/
+__pycache__/
+*.pyc
+*.key
+private.key
