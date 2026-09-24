@@ -159,8 +159,10 @@ cd phone-agent/vonage-agent
 ./agent call +819012345678 "用件" --wait
 ```
 
-詳細は [`phone-agent/vonage-agent/README.md`](phone-agent/vonage-agent/README.md)、ボット向け手順は
-[`BOT_GUIDE.md`](phone-agent/vonage-agent/BOT_GUIDE.md) を参照してください。
+詳細は [`phone-agent/vonage-agent/README.md`](phone-agent/vonage-agent/README.md) を参照してください。
+
+- **Gemini CLI（無料）と対話しながら発信を指示する**: [`GEMINI_CLI_SETUP.md`](phone-agent/vonage-agent/GEMINI_CLI_SETUP.md)
+- その他のボット向け手順: [`BOT_GUIDE.md`](phone-agent/vonage-agent/BOT_GUIDE.md)
 
 ## Pythonテストベッド（`phone-agent/`）
 
