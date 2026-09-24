@@ -5,3 +5,6 @@ __pycache__/
 *.key
 private.key
 .DS_Store
+bin/
+data/
+.pytest_cache/

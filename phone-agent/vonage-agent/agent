@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Wrapper so the bot / humans can run `./agent <command>` from anywhere.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+PY="$ROOT/.venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  echo "venv がありません。先に $ROOT/setup.sh を実行してください。" >&2
+  exit 1
+fi
+cd "$ROOT"
+exec "$PY" "$ROOT/agent.py" "$@"
