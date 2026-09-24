@@ -1,14 +1,15 @@
 # phone-agent
 
-Compare **Twilio** and **Plivo** outbound test calls.
+音声プロバイダの発信テスト用Pythonツール群です。
 
-Phase 1: speak one Japanese line, then hang up.  
-Phase 2 (later): bridge audio to Grok Voice.
+- **AIと会話する電話エージェント（推奨）: [`vonage-agent/`](vonage-agent/README.md)** — Vonage Voice × Gemini Live。
+  トンネルURLの自動反映、発信/着信、文字起こし・結果要約つき。ボット向け手順は [`vonage-agent/BOT_GUIDE.md`](vonage-agent/BOT_GUIDE.md)
+- 以下の Twilio / Plivo スクリプトは、固定の日本語を1回話して切るだけの回線テストです。
 
 ## Twilio版の実行方法
 
 ```bash
-cd /workspace/phone-agent
+cd phone-agent
 ./call_phone --dry-run +819012345678
 # live only after explicit 「発信して」:
 ./call_phone +819012345678

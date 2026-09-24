@@ -146,15 +146,30 @@ curl http://localhost:3000/health
 - 自分のテスト番号へ発信
 - 必要ならRedis化、文字起こし、通話結果要約を追加
 
+## Vonage × Gemini Live 電話エージェント（`phone-agent/vonage-agent/`）
+
+Twilio/OpenAI を使わずに、**Vonage 無料トライアル + Google AI Studio の Gemini Live（`gemini-3.8-live`）** で
+AIが電話をかける／受けることができる Python 実装です。Grok Bot などのエージェントからシェルコマンドで操作できます。
+
+```bash
+cd phone-agent/vonage-agent
+./setup.sh                 # venv・依存・.env・cloudflared
+./agent doctor             # 設定チェック
+./agent start              # サーバー + cloudflared。トンネルURLが変わるたびにVonageのWebhookをAPIで自動更新
+./agent call +819012345678 "用件" --wait
+```
+
+詳細は [`phone-agent/vonage-agent/README.md`](phone-agent/vonage-agent/README.md)、ボット向け手順は
+[`BOT_GUIDE.md`](phone-agent/vonage-agent/BOT_GUIDE.md) を参照してください。
+
 ## Pythonテストベッド（`phone-agent/`）
 
-`phone-agent/` には、このMCPプラグイン（TypeScript）とは独立した、音声プロバイダの接続確認用Pythonテストベッドが入っています（Grok Botと組み合わせて使っていたもの）。`skills/phone-agent/` はMCP用のスキル定義で別物です。
+`phone-agent/` 直下には、このMCPプラグイン（TypeScript）とは独立した、音声プロバイダの接続確認用スクリプトもあります。`skills/phone-agent/` はMCP用のスキル定義で別物です。
 
 - **Twilio Trial**: `call_phone` / `call_phone.py` — 固定の日本語TTSを1回話して切る発信テスト。`--dry-run` は発信せず設定と番号だけ検証、`--trial` はTrialアカウント向けの最小パラメータで発信
 - **Plivo**: `call_phone_plivo` / `serve_plivo_answer.py` — 公開 `PLIVO_ANSWER_URL` が返す `static/plivo_answer.xml` を使う発信テスト
-- **Vonage WebSocket接続確認**: `vonage-agent/` — Vonage Voice APIのAnswer / Event webhookと、音声バイトを受け取るWebSocket（`/socket`）を持つFastAPIアプリ。AIブリッジは未接続
 
-セットアップと環境変数は `phone-agent/README.md` と `phone-agent/vonage-agent/README.md` を参照してください。資格情報は各ディレクトリの `.env.example` をコピーした `.env` に入れ、`.env` / `*.key` / `private.key` / `.venv` はコミットしないでください（`.gitignore` で除外済み）。ライブ発信は課金され、相手に実際に電話がかかります。明示的に指示された場合のみ実行し、確認には `--dry-run` を使ってください。
+資格情報は各ディレクトリの `.env.example` をコピーした `.env` に入れ、`.env` / `*.key` / `private.key` / `.venv` はコミットしないでください（`.gitignore` で除外済み）。ライブ発信は課金され、相手に実際に電話がかかります。明示的に指示された場合のみ実行し、確認には `--dry-run` を使ってください。
 
 ## License
 

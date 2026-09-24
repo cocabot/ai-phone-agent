@@ -12,27 +12,14 @@ run this command (or ask the agent to run it after saying 発信して).
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 
 from twilio.rest import Client
 
 from config import load_config
+from number_utils import normalize_to_e164
 from twiml_scripts import build_test_say_twiml
 from providers.twilio_provider import place_trial_call, trial_create_params
-
-E164_RE = re.compile(r"^\+[1-9]\d{7,14}$")
-
-
-def normalize_to_e164(raw: str) -> str:
-    number = raw.strip().replace(" ", "").replace("-", "")
-    if number.startswith("00"):
-        number = "+" + number[2:]
-    if not E164_RE.match(number):
-        raise SystemExit(
-            f"Invalid number {raw!r}. Use E.164 like +819012345678"
-        )
-    return number
 
 
 def place_test_call(to_number: str) -> str:
