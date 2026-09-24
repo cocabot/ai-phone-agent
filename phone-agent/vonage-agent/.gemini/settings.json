@@ -1,0 +1,10 @@
+{
+  "tools": {
+    "allowed": [
+      "run_shell_command(./agent status)",
+      "run_shell_command(./agent doctor)",
+      "run_shell_command(./agent calls)",
+      "run_shell_command(./agent show)"
+    ]
+  }
+}

@@ -10,6 +10,9 @@ AIが日本語で電話をかける／受けるためのサーバーとCLIです
                          ↑ トンネルURLが変わるたびに Vonage Application API で自動更新
 ```
 
+> **Gemini CLI と対話しながら発信を指示したい場合（無料）は [GEMINI_CLI_SETUP.md](GEMINI_CLI_SETUP.md) を参照。**
+> Gemini CLI 用の操作ルールは [GEMINI.md](GEMINI.md)、その他のボット向けは [BOT_GUIDE.md](BOT_GUIDE.md)。
+
 ## 主な機能
 
 - **トンネルURLの自動反映**: `cloudflared` quick tunnel を自動起動し、URLが変わる（再起動・切断）たびに

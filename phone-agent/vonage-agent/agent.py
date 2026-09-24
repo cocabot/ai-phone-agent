@@ -148,19 +148,34 @@ def cmd_call(args: argparse.Namespace) -> None:
         if missing:
             print("未設定: " + ", ".join(missing))
         return
-    print(f"call placed id={data['id']} status={data['status']}")
+    print(
+        f"call placed id={data['id']} status={data['status']}", file=sys.stderr if args.json else sys.stdout
+    )
     if not args.wait:
+        if args.json:
+            return dump(data)
         print(f"結果確認: ./agent show {data['id']}   (待つ場合: ./agent show {data['id']} --wait)")
         return
     wait_and_show(data["id"], args.json)
 
 
 def wait_and_show(call_id: str, as_json: bool) -> None:
-    print("通話終了を待っています…（Ctrl+C で待機だけ中断）", file=sys.stderr)
-    deadline = time.monotonic() + settings.max_call_seconds + settings.ringing_timeout + 120
+    print(
+        f"通話終了を待っています…（Ctrl+C で待機だけ中断。通話は続き、./agent show {call_id} --wait で再開可）",
+        file=sys.stderr,
+    )
+    started = time.monotonic()
+    deadline = started + settings.max_call_seconds + settings.ringing_timeout + 120
     data: dict[str, Any] = {}
     while time.monotonic() < deadline:
-        data = api("GET", f"/api/calls/{call_id}?wait=60", timeout=90)
+        data = api("GET", f"/api/calls/{call_id}?wait=20", timeout=50)
+        # Progress on stderr keeps callers (e.g. agent CLIs with inactivity timeouts) alive.
+        print(
+            f"[{int(time.monotonic() - started)}s] status={data.get('status')} "
+            f"発話数={len(data.get('transcript') or [])}",
+            file=sys.stderr,
+            flush=True,
+        )
         if data.get("ended_at") or data.get("status") in {
             "completed",
             "busy",
